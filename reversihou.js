@@ -20,7 +20,8 @@ define([
   "dojo/_base/declare",
   "ebg/core/gamegui",
   "ebg/counter",
-], function (dojo, declare, gamegui, counter) {
+  getLibUrl("bga-animations", "1.x"),
+], function (dojo, declare, gamegui, counter, BgaAnimations) {
   return declare("bgagame.reversihou", ebg.core.gamegui, {
     constructor: function () {
       console.log("reversihou constructor");
@@ -50,8 +51,15 @@ define([
       this.getGameAreaElement().insertAdjacentHTML(
         "beforeend",
         `
-                <div id="player-tables">test element</div>
-            `
+          <div id="player-tables"></div>
+        `
+      );
+      this.getGameAreaElement().insertAdjacentHTML(
+        "beforeend",
+        `
+          <div id="board">
+          </div>
+        `
       );
 
       // Setting up player boards
@@ -60,23 +68,58 @@ define([
         this.getPlayerPanelElement(player.id).insertAdjacentHTML(
           "beforeend",
           `
-                    <div id="player-counter-${player.id}">A player counter</div>
+          <div id="player-counter-${player.id}">
+            ${player.color === "ffffff" ? "white" : "black"}
+          </div>
                 `
         );
 
         // example of adding a div for each player
-        document.getElementById("player-tables").insertAdjacentHTML(
-          "beforeend",
-          `
-                    <div id="player-table-${player.id}">
-                        <strong>${player.name}</strong>
-                        <div>Player zone content goes here</div>
-                    </div>
-                `
-        );
+        // document.getElementById("player-tables").insertAdjacentHTML(
+        //   "beforeend",
+        //   `
+        //             <div id="player-table-${player.id}">
+        //                 <strong>${player.name}</strong>
+        //                 <div>Player zone content goes here</div>
+        //             </div>
+        //         `
+        // );
       });
 
       // TODO: Set up your game interface here, according to "gamedatas"
+      const board = document.getElementById("board");
+      const hor_scale = 64.8;
+      const ver_scale = 64.4;
+
+      for (let x = 1; x <= 8; x++) {
+        for (let y = 1; y <= 8; y++) {
+          const left = Math.round((x - 1) * hor_scale + 10);
+          const top = Math.round((y - 1) * ver_scale + 7);
+
+          board.insertAdjacentHTML(
+            "afterbegin",
+            `<div id="square_${x}_${y}" class="square" style="left: ${left}px; top: ${top}px;"></div>`
+          );
+        }
+      }
+
+      this.animationManager = new BgaAnimations.Manager({
+        animationsActive: () => this.bgaAnimationsActive(),
+      });
+
+      for (var i in gamedatas.board) {
+        var square = gamedatas.board[i];
+
+        if (square.player !== null) {
+          this.addDiscOnBoard(square.x, square.y, square.player);
+        }
+      }
+
+      document
+        .querySelectorAll(".square")
+        .forEach((square) =>
+          square.addEventListener("click", (e) => this.onPlayDisc(e))
+        );
 
       // Setup game notifications to handle (see "setupNotifications" method below)
       this.setupNotifications();
@@ -94,21 +137,29 @@ define([
       console.log("Entering state: " + stateName, args);
 
       switch (stateName) {
-        /* Example:
-            
-            case 'myGameState':
-            
-                // Show some HTML block at this game state
-                dojo.style( 'my_html_block_id', 'display', 'block' );
-                
-                break;
-           */
-
-        case "dummy":
+        case "playerTurn":
+          this.updatePossibleMoves(args.args.possibleMoves);
           break;
       }
     },
 
+    updatePossibleMoves: function (possibleMoves) {
+      // Remove current possible moves
+      document
+        .querySelectorAll(".possibleMove")
+        .forEach((div) => div.classList.remove("possibleMove"));
+
+      for (var x in possibleMoves) {
+        for (var y in possibleMoves[x]) {
+          // x,y is a possible move
+          document
+            .getElementById(`square_${x}_${y}`)
+            .classList.add("possibleMove");
+        }
+      }
+
+      this.addTooltipToClass("possibleMove", "", _("Place a disc here"));
+    },
     // onLeavingState: this method is called each time we are leaving a game state.
     //                 You can use this method to perform some user interface changes at this moment.
     //
@@ -140,21 +191,21 @@ define([
       if (this.isCurrentPlayerActive()) {
         switch (stateName) {
           case "playerTurn":
-            const playableCardsIds = args.playableCardsIds; // returned by the argPlayerTurn
+            // const playableCardsIds = args.playableCardsIds; // returned by the argPlayerTurn
 
-            // Add test action buttons in the action status bar, simulating a card click:
-            playableCardsIds.forEach((cardId) =>
-              this.statusBar.addActionButton(
-                _("Play card with id ${card_id}").replace("${card_id}", cardId),
-                () => this.onCardClick(cardId)
-              )
-            );
+            // // Add test action buttons in the action status bar, simulating a card click:
+            // playableCardsIds.forEach((cardId) =>
+            //   this.statusBar.addActionButton(
+            //     _("Play card with id ${card_id}").replace("${card_id}", cardId),
+            //     () => this.onCardClick(cardId)
+            //   )
+            // );
 
-            this.statusBar.addActionButton(
-              _("Pass"),
-              () => this.bgaPerformAction("actPass"),
-              { color: "secondary" }
-            );
+            // this.statusBar.addActionButton(
+            //   _("Pass"),
+            //   () => this.bgaPerformAction("actPass"),
+            //   { color: "secondary" }
+            // );
             break;
         }
       }
@@ -169,7 +220,30 @@ define([
             script.
         
         */
+    addDiscOnBoard: async function (x, y, playerId, animate = true) {
+      const color = this.gamedatas.players[playerId].color;
+      const discId = `disc_${x}_${y}`;
 
+      document.getElementById(`square_${x}_${y}`).insertAdjacentHTML(
+        "beforeend",
+        `
+        <div class="disc" data-color="${color}" id="${discId}">
+            <div class="disc-faces">
+                <div class="disc-face" data-side="white"></div>
+                <div class="disc-face" data-side="black"></div>
+            </div>
+        </div>
+      `
+      );
+
+      if (animate) {
+        const element = document.getElementById(discId);
+        await this.animationManager.fadeIn(
+          element,
+          document.getElementById(`overall_player_board_${playerId}`)
+        );
+      }
+    },
     ///////////////////////////////////////////////////
     //// Player's action
 
@@ -184,16 +258,29 @@ define([
         
         */
 
-    // Example:
+    onPlayDisc: function (evt) {
+      // Stop this event propagation
+      evt.preventDefault();
+      evt.stopPropagation();
 
-    onCardClick: function (card_id) {
-      console.log("onCardClick", card_id);
+      // Get the cliqued square x and y
+      // Note: square id format is "square_X_Y"
+      var coords = evt.currentTarget.id.split("_");
+      var x = coords[1];
+      var y = coords[2];
 
-      this.bgaPerformAction("actPlayCard", {
-        card_id,
-      }).then(() => {
-        // What to do after the server call if it succeeded
-        // (most of the time, nothing, as the game will react to notifs / change of state instead)
+      if (
+        !document
+          .getElementById(`square_${x}_${y}`)
+          .classList.contains("possibleMove")
+      ) {
+        // This is not a possible move => the click does nothing
+        return;
+      }
+
+      this.bgaPerformAction("actPlayDisc", {
+        x: x,
+        y: y,
       });
     },
 
@@ -216,21 +303,79 @@ define([
       this.bgaSetupPromiseNotifications();
     },
 
-    // TODO: from this point and below, you can write your game notifications handling methods
+    notif_playDisc: async function (args) {
+      // Remove current possible moves (makes the board more clear)
+      document
+        .querySelectorAll(".possibleMove")
+        .forEach((div) => div.classList.remove("possibleMove"));
 
-    /*
-        Example:
-        
-        notif_cardPlayed: async function( args )
+      await this.addDiscOnBoard(args.x, args.y, args.player_id);
+    },
+
+    animateTurnOverDisc: async function (disc, targetColor) {
+      const squareDiv = document.getElementById(`square_${disc.x}_${disc.y}`);
+      const discDiv = document.getElementById(`disc_${disc.x}_${disc.y}`);
+
+      squareDiv.classList.add("flip-animation");
+      await this.wait(500); // for the flip animation to finish
+
+      discDiv.dataset.color = targetColor;
+
+      const parallelAnimations = [
         {
-            console.log( 'notif_cardPlayed' );
-            console.log( args );
-            
-            // Note: args contains the arguments specified during you "notifyAllPlayers" / "notifyPlayer" PHP call
-            
-            // TODO: play the card in the user interface.
-        },    
-        
-        */
+          keyframes: [
+            // flip the disc
+            { transform: `rotateY(180deg)` },
+            { transform: `rotateY(0deg)` },
+          ],
+        },
+        {
+          keyframes: [
+            // lift the disc
+            { transform: `translate(0, -12px) scale(1.2)`, offset: 0.5 },
+          ],
+        },
+      ];
+
+      await this.animationManager.slideAndAttach(discDiv, squareDiv, {
+        duration: 1000,
+        parallelAnimations,
+      });
+
+      squareDiv.classList.remove("flip-animation");
+      await this.wait(500); // for the flip animation removal to finish
+    },
+
+    notif_turnOverDiscs: async function (args) {
+      // Custom sound effect
+      // if (
+      //   this.getGameUserPreference(this.preference_sound) == 1 &&
+      //   !g_archive_mode
+      // ) {
+      //   this.sounds.play("play");
+      //   this.disableNextMoveSound();
+      // }
+
+      // Update score
+      Object.entries(args.scores).forEach(([playerId, newScore]) => {
+        this.scoreCtrl[playerId].toValue(newScore);
+      });
+
+      // Get the color of the player who is returning the discs
+      const targetColor = this.gamedatas.players[args.player_id].color;
+      // wait for the animations of all turned discs to be over before considering the notif done
+      await Promise.all(
+        args.turnedOver.map((disc) =>
+          this.animateTurnOverDisc(disc, targetColor)
+        )
+      );
+    },
+
+    notif_newScores: async function (args) {
+      for (var player_id in args.scores) {
+        var newScore = args.scores[player_id];
+        this.scoreCtrl[player_id].toValue(newScore);
+      }
+    },
   });
 });

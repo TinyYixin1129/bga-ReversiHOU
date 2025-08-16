@@ -16,7 +16,7 @@
 
 use Bga\GameFramework\GameStateBuilder;
 use Bga\GameFramework\StateType;
-
+require_once("modules/php/constants.inc.php");
 /*
    Game state machine is a tool used to facilitate game developpement by doing common stuff that can be set up
    in a very easy way from this configuration file.
@@ -57,37 +57,36 @@ use Bga\GameFramework\StateType;
 $machinestates = [
     // only keep this line if your initial state is not 2. In that case, uncomment and replace '2' by your first state id.
     // 1 => GameStateBuilder::gameSetup(2)->build(), 
+    ST_BGA_GAME_SETUP => GameStateBuilder::gameSetup(ST_PLAYER_PLAY_DISC)->build(),
 
-    2 => GameStateBuilder::create()
+    ST_PLAYER_PLAY_DISC => GameStateBuilder::create()
         ->name('playerTurn')
-        ->description(clienttranslate('${actplayer} must play a card or pass'))
-        ->descriptionmyturn(clienttranslate('${you} must play a card or pass'))
+        ->description(clienttranslate('${actplayer} must play a disc'))
+        ->descriptionmyturn(clienttranslate('${you} must play a disc'))
         ->type(StateType::ACTIVE_PLAYER)
         ->args('argPlayerTurn')
         ->possibleactions([
             // these actions are called from the front with bgaPerformAction, and matched to the function on the game.php file
-            'actPlayCard', 
-            'actPass',
+            'actPlayDisc', 
         ])
         ->transitions([
-            'playCard' => 3, 
-            'pass' => 3,
+            'playDisc' => ST_NEXT_PLAYER, 
         ])
         ->build(),
 
-    3 => GameStateBuilder::create()
+    ST_NEXT_PLAYER => GameStateBuilder::create()
         ->name('nextPlayer')
-        ->description('')
         ->type(StateType::GAME)
         ->action('stNextPlayer')
         ->updateGameProgression(true)
         ->transitions([
-            'endScore' => 98, 
-            'nextPlayer' => 2,
+            'nextTurn' => ST_PLAYER_PLAY_DISC, 
+            'cantPlay' => ST_NEXT_PLAYER,
+            'endGame' => ST_END_GAME
         ])
         ->build(),
 
-    98 => GameStateBuilder::endScore()->build(),
+    // ST_END_GAME => GameStateBuilder::endScore()->build(),
 ];
 
 
